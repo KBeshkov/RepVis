@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class RNN(nn.Module):
-    def __init__(self, n_neurons, n_stim, n_outputs, n_layers, rnn_type='RNN'):
+    def __init__(self, n_neurons, n_stim, n_outputs, n_layers, rnn_type='RNN',dropout_rate=0.1):
         super(RNN, self).__init__()
         #params
         self.n_neurons = n_neurons
@@ -16,18 +16,19 @@ class RNN(nn.Module):
         
         #RNN layer
         if rnn_type=='RNN':
-            self.rnn = nn.RNN(n_neurons+n_stim,n_neurons,n_layers)
+            self.rnn = nn.RNN(n_neurons+n_stim,n_neurons,n_layers,dropout=dropout_rate)
         elif rnn_type=='GRU':
-            self.rnn = nn.GRU(n_neurons+n_stim,n_neurons,n_layers)
+            self.rnn = nn.GRU(n_neurons+n_stim,n_neurons,n_layers,dropout=dropout_rate)
         elif rnn_type=='LSTM':
-            self.rnn = nn.LSTM(n_neurons+n_stim,n_neurons,n_layers)
+            self.rnn = nn.LSTM(n_neurons+n_stim,n_neurons,n_layers,dropout=dropout_rate)
         else:
             raise SystemExit('invalid RNN type')
             
         self.ff = nn.Linear(n_neurons,n_neurons)
         
+        
     def forward(self, x):
-        h0 = torch.zeros(self.n_layers,1,self.n_neurons).requires_grad_()
+        h0 = torch.zeros(self.n_layers,x.shape[1],self.n_neurons).requires_grad_()
         rnn_out, h0 = self.rnn(x,h0.detach())
         rnn_out = rnn_out[:,-1,:]
         out = self.ff(rnn_out)
@@ -60,8 +61,8 @@ class Optimization:
         for epoch in range(1, n_epochs+1):
             batch_losses = []
             for x_batch, y_batch in train_loader:
-                x_batch = x_batch.view([batch_size, -1, n_features]).to("cpu")
-                y_batch = y_batch.view([batch_size, -1, n_features]).to("cpu")
+                x_batch = x_batch.to("cpu")
+                y_batch = y_batch.to("cpu")
                 loss = self.train_step(x_batch, y_batch)
                 batch_losses.append(loss)
             training_loss = np.mean(batch_losses)
@@ -69,8 +70,8 @@ class Optimization:
             with torch.no_grad():
                 batch_test_losses = []
                 for x_test, y_test in test_loader:
-                    x_test = x_test.view([batch_size, -1, n_features]).to("cpu")
-                    y_test = y_test.view([batch_size, -1, n_features]).to("cpu")
+                    x_test = x_test.to("cpu")
+                    y_test = y_test.to("cpu")
                     self.model.eval()
                     yhat = self.model(x_test)
                     test_loss = self.loss_fn(y_test, yhat).item()
@@ -86,8 +87,8 @@ class Optimization:
             predictions = []
             values = []
             for x_test, y_test in test_loader:
-                x_test = x_test.view([batch_size,-1,n_features]).to("cpu")
-                y_test = y_test.view([batch_size, -1, n_features]).to("cpu")
+                x_test = x_test.to("cpu")
+                y_test = y_test.to("cpu")
                 self.model.eval()
                 yhat = self.model(x_test)
                 predictions.append(yhat.to("cpu").detach().numpy())
@@ -101,3 +102,17 @@ class Optimization:
         plt.legend()
         plt.title("Losses")
         plt.show()
+
+def Model_predict(model,iters,init_cond, cond_set):
+    x = torch.zeros([len(init_cond),iters,np.shape(init_cond)[2]-1])
+    x[:,0,:] = np.squeeze(init_cond[:,:,:-1])
+    for i in range(iters-1):
+        inp_stim = cond_set[:,i,:]
+        inp_stim = inp_stim[:,None,:]
+        inp_x = x[:,i,:]
+        inp_x = inp_x[:,None,:]
+        inp_x = torch.dstack([inp_x,inp_stim])
+        print(np.shape(inp_x))
+        x[:,i+1,:] = model(inp_x)
+    return x
+        
