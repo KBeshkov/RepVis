@@ -1,6 +1,9 @@
 #Data processing functions
 import numpy as np
 from scipy.signal import convolve2d
+import torch
+from torch.utils.data import Dataset
+
 
 '''
 Smoothing of spikes/rates:
@@ -37,14 +40,27 @@ def smooth_rates(rates,kern_width,tstep,kern_type='Gauss',norm=True):
         smooth_rates = (smooth_rates-np.mean(smooth_rates))/np.std(smooth_rates)
     return smooth_rates
 
-
+'''
+Split data by stimuli:
+    dat: dataset to be split
+    intervals: a list of lengths for each stimulus
+    tstep: the size of a single time step
+'''
 
 def split_by_stim(dat,intervals,tstep):
     increment = int(np.mean(intervals)/tstep)
-    new_dat = np.zeros([len(intervals),len(dat),increment])
+    new_dat = np.zeros([len(intervals),increment,len(dat)])
     curr_step = 0
     for i in range(len(intervals)):
-        new_dat[i,:,:] = dat[:,curr_step:curr_step+increment]
+        new_dat[i,:,:] = dat[:,curr_step:curr_step+increment].T
         curr_step = curr_step+increment
     return new_dat
-        
+
+
+def split_by_len(dat,tlen):
+    nsamples = len(dat.T)-tlen
+    new_dat = np.zeros([nsamples,tlen,len(dat)])
+    rnd_indcs = np.arange(0,nsamples)
+    for i in range(nsamples):
+        new_dat[i,:,:,] = dat[:,rnd_indcs[i]:rnd_indcs[i]+tlen].T
+    return new_dat
