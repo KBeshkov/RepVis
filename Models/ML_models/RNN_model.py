@@ -3,37 +3,49 @@ import torch
 from torch import nn
 import numpy as np
 import matplotlib.pyplot as plt
+from collections import OrderedDict
 
 class RNN(nn.Module):
-    def __init__(self, n_neurons, n_stim, n_outputs, n_layers, rnn_type='RNN',dropout_rate=0.1):
+    def __init__(self, n_neurons, n_outputs, n_layers, n_tsteps=1,rnn_type='RNN',dropout_rate=0.1):
         super(RNN, self).__init__()
         #params
         self.n_neurons = n_neurons
-        self.n_stim = n_stim
         self.outputs = n_outputs
         self.n_layers = n_layers
-
+        self.n_tsteps = n_tsteps
         
         #RNN layer
         if rnn_type=='RNN':
-            self.rnn = nn.RNN(n_neurons+n_stim,n_neurons,n_layers,dropout=dropout_rate)
+            self.rnn_dict = OrderedDict()
+            for i in range(self.n_tsteps):
+                self.rnn_dict['rnn'+str(i)] = nn.RNN(n_neurons,n_neurons,n_layers,dropout=dropout_rate)
+                self.rnn_dict['rlin'+str(i)] = nn.Linear(n_neurons,n_neurons)
+            self.rnn = nn.Sequential(OrderedDict(self.rnn_dict))
         elif rnn_type=='GRU':
-            self.rnn = nn.GRU(n_neurons+n_stim,n_neurons,n_layers,dropout=dropout_rate)
+            self.rnn = nn.GRU(n_neurons,n_neurons,n_layers,dropout=dropout_rate)
         elif rnn_type=='LSTM':
-            self.rnn = nn.LSTM(n_neurons+n_stim,n_neurons,n_layers,dropout=dropout_rate)
+            self.rnn = nn.LSTM(n_neurons,n_neurons,n_layers,dropout=dropout_rate)
         else:
             raise SystemExit('invalid RNN type')
-            
-        self.ff = nn.Linear(n_neurons,n_neurons)
-        
+                    
         
     def forward(self, x):
-        h0 = torch.zeros(self.n_layers,x.shape[1],self.n_neurons).requires_grad_()
-        rnn_out, h0 = self.rnn(x,h0.detach())
-        rnn_out = rnn_out[:,-1,:]
-        out = self.ff(rnn_out)
+        out = torch.zeros(x.shape[0],self.n_tsteps,self.n_neurons)
+        rnn_out = x.clone()[:,0,:]
+        rnn_out = rnn_out[:,None,:]
+        for n,layer in enumerate(self.rnn):
+            if n%2==0:
+                rnn_out = layer(rnn_out)
+            else:
+                rnn_out = layer(rnn_out[0])
+                out[:,int((n-1)/2)] = rnn_out
         return out
     
+    def get_params(self):
+        param_dict = {}
+        for i, layer in enumerate(self.rnn):
+            param_dict[str(i)] = layer.weight_ih_l()
+        return param_dict
 
 class Optimization:
     def __init__(self, model, loss_fn, optimizer):
@@ -104,15 +116,15 @@ class Optimization:
         plt.show()
 
 def Model_predict(model,iters,init_cond, cond_set):
-    x = torch.zeros([len(init_cond),iters,np.shape(init_cond)[2]-1])
-    x[:,0,:] = np.squeeze(init_cond[:,:,:-1])
-    for i in range(iters-1):
-        inp_stim = cond_set[:,i,:]
-        inp_stim = inp_stim[:,None,:]
+    x = torch.zeros([len(init_cond),iters+1,np.shape(init_cond)[2]])
+    x[:,0,:] = np.squeeze(init_cond)
+    for i in range(iters):
+        # inp_stim = cond_set[:,i,:]
+        # inp_stim = inp_stim[:,None,:]
         inp_x = x[:,i,:]
         inp_x = inp_x[:,None,:]
-        inp_x = torch.dstack([inp_x,inp_stim])
-        print(np.shape(inp_x))
+        # inp_x = torch.dstack([inp_x,inp_stim])
         x[:,i+1,:] = model(inp_x)
-    return x
+    return x[:,1:,:]
         
+

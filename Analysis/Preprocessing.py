@@ -64,3 +64,21 @@ def split_by_len(dat,tlen):
     for i in range(nsamples):
         new_dat[i,:,:,] = dat[:,rnd_indcs[i]:rnd_indcs[i]+tlen].T
     return new_dat
+
+'''
+Takes a (batchXtime)Xneurons array and splits into time delayed arrays X and y
+'''
+def split_set_onemany(dat,out_len):
+    y = torch.zeros([dat.shape[0]-out_len,out_len,dat.shape[2]])
+    for i in range(dat.shape[0]-out_len):
+        y[i,:,:] =  dat[i:i+out_len,0,:]
+    return y
+        
+        
+def stim_mat(dat,stim_num,stim_len,nrns_num):
+    stim_m = np.zeros([stim_num,stim_num*stim_len,nrns_num])
+    for s in range(stim_num):
+        stim_m[s,s*stim_len:(s+1)*stim_len,:] = dat[s]
+    stim_m[stim_m==0] = np.nan
+    return stim_m
+    
